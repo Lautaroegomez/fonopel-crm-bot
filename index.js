@@ -11,10 +11,10 @@ app.get('/', (req, res) => res.send('🚀 CRM Fonopel Online y Conectado a Chatw
 
 app.post('/webhook', async (req, res) => {
     // Simulamos o recibimos datos del cliente
-    const mensaje = req.body.message || "Hola, info de precios";
-    const nombre = req.body.contact_name || "Cliente Nuevo";
-    const telefono = req.body.contact_phone || "123456";
-
+    // Acepta datos tanto de un link (query) como de un mensaje real (body)
+    const mensaje = req.body.message || req.query.message || "Hola";
+    const nombre = req.body.contact_name || req.query.contact_name || "Cliente Nuevo";
+    const telefono = req.body.contact_phone || req.query.contact_phone || "123456";
     try {
         // 1. Gemini clasifica el mensaje
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
