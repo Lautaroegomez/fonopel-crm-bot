@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.get('/', (req, res) => res.send('🚀 CRM Fonopel Online y Conectado a Chatwoot'));
 
-app.post('/webhook', async (req, res) => {
+app.all('/webhook', async (req, res) => {
     // Simulamos o recibimos datos del cliente
     // Acepta datos tanto de un link (query) como de un mensaje real (body)
     const mensaje = req.body.message || req.query.message || "Hola";
