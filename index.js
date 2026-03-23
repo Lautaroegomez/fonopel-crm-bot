@@ -1,37 +1,48 @@
 const express = require('express');
+const axios = require('axios');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 app.use(express.json());
 
-// Verificamos que la llave exista para que no explote el código
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-app.get('/', (req, res) => {
-    if (!apiKey) {
-        res.send('⚠️ Servidor vivo, pero falta la GEMINI_API_KEY en Variables de Railway.');
-    } else {
-        res.send('✅ ¡Cerebro de Fonopel Online y Clasificando!');
-    }
-});
+app.get('/', (req, res) => res.send('🚀 CRM Fonopel Online y Conectado a Chatwoot'));
 
 app.post('/webhook', async (req, res) => {
-    const mensajeCliente = req.body.message || "Hola"; 
-    
-    if (!genAI) return res.status(500).send("Falta API KEY");
+    // Simulamos o recibimos datos del cliente
+    const mensaje = req.body.message || "Hola, info de precios";
+    const nombre = req.body.contact_name || "Cliente Nuevo";
+    const telefono = req.body.contact_phone || "123456";
 
     try {
+        // 1. Gemini clasifica el mensaje
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `Sos el clasificador de Tienda Fonopel. Analizá y respondé SOLO: VENTAS, SOPORTE o ADMIN. Mensaje: "${mensajeCliente}"`;
+        const prompt = `Sos el clasificador de Tienda Fonopel. Analizá el mensaje y respondé SOLO con: VENTAS, SOPORTE o ADMIN. Mensaje: "${mensaje}"`;
         const result = await model.generateContent(prompt);
-        res.status(200).send({ categoria: result.response.text().trim() });
+        const categoria = result.response.text().trim();
+
+        // 2. Enviamos la conversación a Chatwoot con la etiqueta de Gemini
+        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
+        
+        await axios.post(chatwootUrl, {
+            source_id: telefono,
+            inbox_id: process.env.CHATWOOT_INBOX_ID,
+            contact_name: nombre,
+            message: { content: mensaje },
+            additional_attributes: { category: categoria }
+        }, { 
+            headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
+        });
+
+        console.log(`✅ Clasificado como ${categoria} y enviado a Chatwoot`);
+        res.status(200).send({ status: "success", category: categoria });
+
     } catch (error) {
-        res.status(200).send({ error: "Error de IA, pero servidor vivo" });
+        console.error("❌ Error:", error.message);
+        res.status(200).send("Error procesado");
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Puerto activo: ${PORT}`);
-});
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', () => console.log(`Servidor activo en puerto ${PORT}`));
