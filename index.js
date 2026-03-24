@@ -39,7 +39,7 @@ app.all('/webhook', async (req, res) => {
         
         await axios.post(chatwootUrl, {
             name: nombre,
-            phone_number: `+${telefono}`,
+            phone_number: `+${telefono}`, // El + es obligatorio para Chatwoot
             message: { 
                 content: `[${categoria}] ${mensaje}` 
             }
