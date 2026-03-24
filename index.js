@@ -25,21 +25,30 @@ app.all('/webhook', async (req, res) => {
         console.log("Error Gemini:", e.message);
     }
 
-    try {
-        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/inboxes/${process.env.CHATWOOT_INBOX_ID}/contacts`;
+  try {
+        // RUTA SIMPLIFICADA DE CONVERSACIONES
+        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
         
         await axios.post(chatwootUrl, {
-            name: nombre,
-            phone_number: `+${telefono}`,
-            message: { content: `[${categoria}] ${mensaje}` }
+            source_id: telefono,
+            inbox_id: process.env.CHATWOOT_INBOX_ID,
+            contact_name: nombre,
+            message: { 
+                content: `[${categoria}] ${mensaje}` 
+            }
         }, { 
-            headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
+            headers: { 
+                'api_access_token': process.env.CHATWOOT_TOKEN,
+                'Content-Type': 'application/json'
+            } 
         });
 
-        res.json({ status: "success" });
+        res.json({ status: "success", info: "¡Mensaje en Chatwoot!" });
+
     } catch (error) {
-        console.error("Error Chatwoot:", error.response?.data || error.message);
-        res.status(200).send("Error: " + JSON.stringify(error.response?.data || error.message));
+        // Esto nos va a decir exactamente qué campo está fallando
+        console.error("Error detallado:", error.response?.data || error.message);
+        res.status(200).send("Revisá los IDs en Railway: " + JSON.stringify(error.response?.data || error.message));
     }
 });
 
