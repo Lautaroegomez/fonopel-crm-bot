@@ -7,12 +7,12 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-app.get('/', (req, res) => res.send('🚀 Servidor de Fonopel Online'));
+app.get('/', (req, res) => res.send('🚀 CRM Fonopel Online'));
 
 app.all('/webhook', async (req, res) => {
     const mensaje = req.body.message || req.query.message || "Hola";
     const nombre = req.body.contact_name || req.query.contact_name || "Cliente Prueba";
-    const telefono = req.body.contact_phone || req.query.contact_phone || "549341000111";
+    const telefono = req.body.contact_phone || req.query.contact_phone || "123456";
 
     let categoria = "PENDIENTE";
 
@@ -22,25 +22,28 @@ app.all('/webhook', async (req, res) => {
         const response = await result.response;
         categoria = response.text().trim().toUpperCase();
     } catch (e) {
-        console.log("Error en Gemini, siguiendo sin clasificación...");
+        console.log("Error Gemini:", e.message);
     }
 
     try {
-        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/inboxes/${process.env.CHATWOOT_INBOX_ID}/contacts`;
+        // RUTA ESTÁNDAR PARA CREAR CONVERSACIONES
+        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
         
         await axios.post(chatwootUrl, {
-            name: nombre,
-            phone_number: `+${telefono}`,
+            source_id: telefono,
+            inbox_id: process.env.CHATWOOT_INBOX_ID,
+            contact_name: nombre,
             message: { content: `[${categoria}] ${mensaje}` }
         }, { 
             headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
         });
 
-        res.json({ status: "success" });
+        res.json({ status: "success", info: "Mensaje en Chatwoot" });
 
     } catch (error) {
-        console.error("Error en Chatwoot:", error.message);
-        res.status(200).send("Error: " + error.message);
+        // Esto nos va a decir exactamente qué está pasando
+        console.error("Error Chatwoot:", error.response?.data || error.message);
+        res.status(200).send("Error: " + JSON.stringify(error.response?.data || error.message));
     }
 });
 
