@@ -27,20 +27,24 @@ app.all('/webhook', async (req, res) => {
         console.log("Gemini falló, pero Chatwoot recibirá el mensaje.");
     }
 
-    try {
-        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
+  // 2. Enviamos a Chatwoot (Ruta Directa de Contacto)
+        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/inboxes/${process.env.CHATWOOT_INBOX_ID}/contacts`;
+        
         await axios.post(chatwootUrl, {
-            source_id: telefono,
-            inbox_id: process.env.CHATWOOT_INBOX_ID,
-            contact_name: nombre,
-            message: { content: mensaje },
-            additional_attributes: { category: categoria }
-        }, { headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } });
+            name: nombre,
+            phone_number: `+${telefono}`, // Chatwoot prefiere el formato internacional
+            message: { 
+                content: `[${categoria}] ${mensaje}` // Metemos la categoría de Gemini en el texto
+            }
+        }, { 
+            headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
+        });
 
-        res.json({ status: "success", info: "Mensaje en Chatwoot" });
+        res.json({ status: "success", info: "¡Mensaje en Chatwoot!" });
+
     } catch (error) {
-        console.error("Error en Chatwoot:", error.message);
-        res.status(500).send("Error crítico: " + error.message);
+        console.error("Detalle del error:", error.response?.data || error.message);
+        res.status(200).send("Error en Chatwoot: " + (error.response?.data?.message || error.message));
     }
 });
 
