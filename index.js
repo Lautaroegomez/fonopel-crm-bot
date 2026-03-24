@@ -34,18 +34,26 @@ async function buscarOCrearContacto(base, telefono, nombre, inboxId, config) {
             phone_number: `+${telefono}`,
             inbox_id: inboxId
         }, config);
-        console.log("Contacto creado:", res.data.id);
-        return res.data.id;
+
+        // Chatwoot puede devolver el id en distintos lugares segun la version
+        const id = res.data?.id || res.data?.contact?.id || res.data?.data?.id;
+        console.log("Contacto creado:", id, "| Respuesta completa:", JSON.stringify(res.data).substring(0, 200));
+        return id;
+
     } catch (e) {
-        // Si falla al crear (ya existe por race condition), buscar de nuevo
+        // Si falla al crear (ya existe), buscar de nuevo
         if (e.response && e.response.status === 422) {
             console.log("Contacto ya existia, buscando de nuevo...");
-            const searchRes2 = await axios.get(
-                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
-            );
-            const lista2 = searchRes2.data.payload;
-            if (lista2 && lista2.length > 0) {
-                return lista2[0].id;
+            try {
+                const searchRes2 = await axios.get(
+                    `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
+                );
+                const lista2 = searchRes2.data.payload;
+                if (lista2 && lista2.length > 0) {
+                    return lista2[0].id;
+                }
+            } catch (e2) {
+                console.log("Error en segunda busqueda:", e2.message);
             }
         }
         throw e;
@@ -73,8 +81,10 @@ async function buscarOCrearConversacion(base, contactId, inboxId, config) {
         contact_id: contactId,
         inbox_id: inboxId,
     }, config);
-    console.log("Conversacion nueva:", res.data.id);
-    return { convId: res.data.id, mensajes: [] };
+
+    const convId = res.data?.id || res.data?.data?.id;
+    console.log("Conversacion nueva:", convId);
+    return { convId, mensajes: [] };
 }
 
 app.all('/webhook', async (req, res) => {
@@ -97,6 +107,10 @@ app.all('/webhook', async (req, res) => {
         // -- 1. CONTACTO ---------------------
         const contactId = await buscarOCrearContacto(base, telefono, nombre, inboxId, config);
 
+        if (!contactId) {
+            throw new Error("No se pudo obtener el ID del contacto");
+        }
+
         // -- 2. CONVERSACION -----------------
         const { convId, mensajes } = await buscarOCrearConversacion(base, contactId, inboxId, config);
 
@@ -110,7 +124,6 @@ app.all('/webhook', async (req, res) => {
         // -- 4. LOGICA -----------------------
         const opcion = OPCIONES[mensaje];
 
-        // Verificar si el menu ya fue enviado en esta conversacion
         const yaManduMenu = mensajes.some(m =>
             m.message_type === 1 &&
             m.content &&
