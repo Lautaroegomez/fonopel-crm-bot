@@ -34,31 +34,49 @@ app.all('/webhook', async (req, res) => {
     }
 
     try {
-        // 1. CREAR O BUSCAR CONTACTO — guardar el ID
-        const contactRes = await axios.post(`${base}/contacts`, {
-            name: nombre,
-            phone_number: `+${telefono}`,
-            inbox_id: inboxId
-        }, config);
+        let contactId = null;
 
-        const contactId = contactRes.data.id; // ← CLAVE: usar este ID
+        // 1. BUSCAR si el contacto ya existe por teléfono
+        try {
+            const searchRes = await axios.get(
+                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`,
+                config
+            );
+            const encontrados = searchRes.data.payload;
+            if (encontrados && encontrados.length > 0) {
+                contactId = encontrados[0].id; // ← ya existe, usamos su ID
+                console.log("Contacto encontrado, ID:", contactId);
+            }
+        } catch (e) {
+            console.log("Error buscando contacto:", e.message);
+        }
 
-        // 2. CREAR CONVERSACIÓN con contact_id correcto
+        // 2. Si NO existe, crearlo
+        if (!contactId) {
+            const contactRes = await axios.post(`${base}/contacts`, {
+                name: nombre,
+                phone_number: `+${telefono}`,
+                inbox_id: inboxId
+            }, config);
+            contactId = contactRes.data.id;
+            console.log("Contacto creado, ID:", contactId);
+        }
+
+        // 3. CREAR CONVERSACIÓN
         const convRes = await axios.post(`${base}/conversations`, {
-            contact_id: contactId,   // ← corregido
+            contact_id: contactId,
             inbox_id: inboxId,
         }, config);
-
         const convId = convRes.data.id;
 
-        // 3. ENVIAR MENSAJE por separado
+        // 4. ENVIAR MENSAJE
         await axios.post(`${base}/conversations/${convId}/messages`, {
             content: `[${categoria}] ${mensaje}`,
             message_type: "incoming",
             private: false
         }, config);
 
-        res.json({ status: "success", conversacion: convId, categoria });
+        res.json({ status: "success", conversacion: convId, categoria, contactId });
 
     } catch (error) {
         console.error(error.response?.data || error.message);
