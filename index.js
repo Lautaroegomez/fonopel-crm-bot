@@ -25,14 +25,13 @@ app.all('/webhook', async (req, res) => {
         console.log("Error Gemini:", e.message);
     }
 
-  try {
-        // RUTA SIMPLIFICADA DE CONVERSACIONES
-        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
+ try {
+        // Esta es la ruta que Chatwoot usa para recibir mensajes de cualquier canal
+        const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/inboxes/${process.env.CHATWOOT_INBOX_ID}/contacts`;
         
         await axios.post(chatwootUrl, {
-            source_id: telefono,
-            inbox_id: process.env.CHATWOOT_INBOX_ID,
-            contact_name: nombre,
+            name: nombre,
+            phone_number: `+${telefono}`,
             message: { 
                 content: `[${categoria}] ${mensaje}` 
             }
@@ -40,7 +39,16 @@ app.all('/webhook', async (req, res) => {
             headers: { 
                 'api_access_token': process.env.CHATWOOT_TOKEN,
                 'Content-Type': 'application/json'
-            } 
+            }
+        });
+
+        res.json({ status: "success", info: "¡GOL! Mensaje en Chatwoot" });
+
+    } catch (error) {
+        // Esto nos va a decir exactamente qué le falta (si el token o el ID)
+        console.error("Error detallado:", error.response?.data || error.message);
+        res.status(200).send("Error de Chatwoot: " + JSON.stringify(error.response?.data || error.message));
+    }
         });
 
         res.json({ status: "success", info: "¡Mensaje en Chatwoot!" });
