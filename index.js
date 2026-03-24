@@ -12,6 +12,71 @@ const OPCIONES = {
 
 const MENU = `Hola! Bienvenido a Fonopel. En que podemos ayudarte?\n\n1 - Posventa Mercado Libre\n2 - Comprar articulos\n3 - Solicitar Factura\n4 - Cotizacion mayorista\n\nResponde con el numero de tu opcion.`;
 
+async function buscarOCrearContacto(base, telefono, nombre, inboxId, config) {
+    // Primero buscar
+    try {
+        const searchRes = await axios.get(
+            `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
+        );
+        const lista = searchRes.data.payload;
+        if (lista && lista.length > 0) {
+            console.log("Contacto encontrado:", lista[0].id);
+            return lista[0].id;
+        }
+    } catch (e) {
+        console.log("Error en busqueda:", e.message);
+    }
+
+    // Si no existe, crear
+    try {
+        const res = await axios.post(`${base}/contacts`, {
+            name: nombre,
+            phone_number: `+${telefono}`,
+            inbox_id: inboxId
+        }, config);
+        console.log("Contacto creado:", res.data.id);
+        return res.data.id;
+    } catch (e) {
+        // Si falla al crear (ya existe por race condition), buscar de nuevo
+        if (e.response && e.response.status === 422) {
+            console.log("Contacto ya existia, buscando de nuevo...");
+            const searchRes2 = await axios.get(
+                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
+            );
+            const lista2 = searchRes2.data.payload;
+            if (lista2 && lista2.length > 0) {
+                return lista2[0].id;
+            }
+        }
+        throw e;
+    }
+}
+
+async function buscarOCrearConversacion(base, contactId, inboxId, config) {
+    try {
+        const res = await axios.get(
+            `${base}/contacts/${contactId}/conversations`, config
+        );
+        const conversaciones = res.data.payload;
+        const abierta = conversaciones.find(c =>
+            c.status === "open" && c.inbox_id === inboxId
+        );
+        if (abierta) {
+            console.log("Conversacion abierta encontrada:", abierta.id);
+            return { convId: abierta.id, mensajes: abierta.messages || [] };
+        }
+    } catch (e) {
+        console.log("Error buscando conversacion:", e.message);
+    }
+
+    const res = await axios.post(`${base}/conversations`, {
+        contact_id: contactId,
+        inbox_id: inboxId,
+    }, config);
+    console.log("Conversacion nueva:", res.data.id);
+    return { convId: res.data.id, mensajes: [] };
+}
+
 app.all('/webhook', async (req, res) => {
     const mensaje  = (req.body.message  || req.query.message  || "").trim();
     const nombre   = req.body.contact_name  || req.query.contact_name  || "Cliente";
@@ -29,81 +94,30 @@ app.all('/webhook', async (req, res) => {
     const base    = `https://app.chatwoot.com/api/v1/accounts/${accId}`;
 
     try {
-        // -- 1. BUSCAR O CREAR CONTACTO ---------------------
-        let contactId = null;
+        // -- 1. CONTACTO ---------------------
+        const contactId = await buscarOCrearContacto(base, telefono, nombre, inboxId, config);
 
-        try {
-            const searchRes = await axios.get(
-                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
-            );
-            const encontrados = searchRes.data.payload;
-            if (encontrados && encontrados.length > 0) {
-                contactId = encontrados[0].id;
-            }
-        } catch (e) {}
+        // -- 2. CONVERSACION -----------------
+        const { convId, mensajes } = await buscarOCrearConversacion(base, contactId, inboxId, config);
 
-        if (!contactId) {
-            const contactRes = await axios.post(`${base}/contacts`, {
-                name: nombre,
-                phone_number: `+${telefono}`,
-                inbox_id: inboxId
-            }, config);
-            contactId = contactRes.data.id;
-        }
-
-        // -- 2. BUSCAR CONVERSACION ABIERTA EN CHATWOOT -----
-        let convId = null;
-        let esperandoOpcion = false;
-
-        try {
-            const convsRes = await axios.get(
-                `${base}/contacts/${contactId}/conversations`, config
-            );
-            const conversaciones = convsRes.data.payload;
-
-            const abierta = conversaciones.find(c =>
-                c.status === "open" && c.inbox_id === inboxId
-            );
-
-            if (abierta) {
-                convId = abierta.id;
-
-                // Verificar si el bot ya mando el menu en esta conversacion
-                const mensajes = abierta.messages || [];
-                const yaManduMenu = mensajes.some(m =>
-                    m.message_type === 1 && m.content && m.content.includes("Posventa Mercado Libre")
-                );
-                if (yaManduMenu) {
-                    esperandoOpcion = true;
-                }
-
-                console.log("Conversacion abierta encontrada:", convId, "| Esperando opcion:", esperandoOpcion);
-            }
-        } catch (e) {
-            console.log("Error buscando conversaciones:", e.message);
-        }
-
-        if (!convId) {
-            const convRes = await axios.post(`${base}/conversations`, {
-                contact_id: contactId,
-                inbox_id: inboxId,
-            }, config);
-            convId = convRes.data.id;
-            console.log("Conversacion nueva creada:", convId);
-        }
-
-        // -- 3. REGISTRAR MENSAJE DEL CLIENTE ---------------
+        // -- 3. REGISTRAR MENSAJE CLIENTE ----
         await axios.post(`${base}/conversations/${convId}/messages`, {
             content: mensaje,
             message_type: "incoming",
             private: false
         }, config);
 
-        // -- 4. LOGICA DEL MENU -----------------------------
+        // -- 4. LOGICA -----------------------
         const opcion = OPCIONES[mensaje];
 
+        // Verificar si el menu ya fue enviado en esta conversacion
+        const yaManduMenu = mensajes.some(m =>
+            m.message_type === 1 &&
+            m.content &&
+            m.content.includes("Posventa Mercado Libre")
+        );
+
         if (opcion) {
-            // Cliente eligio una opcion valida -> asignar label
             await axios.post(`${base}/conversations/${convId}/labels`, {
                 labels: [opcion.label]
             }, config);
@@ -114,14 +128,12 @@ app.all('/webhook', async (req, res) => {
                 private: false
             }, config);
 
-            // Resolver la conversacion
             await axios.patch(
                 `${base}/conversations/${convId}/toggle_status`,
                 { status: "resolved" }, config
             );
 
-        } else if (esperandoOpcion) {
-            // Ya mando el menu pero el cliente no eligio opcion valida
+        } else if (yaManduMenu) {
             await axios.post(`${base}/conversations/${convId}/messages`, {
                 content: `Por favor responde solo con el numero de tu opcion (1, 2, 3 o 4).`,
                 message_type: "outgoing",
@@ -129,7 +141,6 @@ app.all('/webhook', async (req, res) => {
             }, config);
 
         } else {
-            // Primera vez -> mandar menu
             await axios.post(`${base}/conversations/${convId}/messages`, {
                 content: MENU,
                 message_type: "outgoing",
