@@ -26,24 +26,27 @@ app.all('/webhook', async (req, res) => {
     }
 
     try {
-        // RUTA ESTÁNDAR PARA CREAR CONVERSACIONES
         const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations`;
         
         await axios.post(chatwootUrl, {
             source_id: telefono,
             inbox_id: process.env.CHATWOOT_INBOX_ID,
             contact_name: nombre,
-            message: { content: `[${categoria}] ${mensaje}` }
+            message: { 
+                content: `[${categoria}] ${mensaje}` 
+            }
         }, { 
-            headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
+            headers: { 
+                'api_access_token': process.env.CHATWOOT_TOKEN,
+                'Content-Type': 'application/json'
+            } 
         });
 
-        res.json({ status: "success", info: "Mensaje en Chatwoot" });
+        res.json({ status: "success", info: "¡Por fin en Chatwoot!" });
 
     } catch (error) {
-        // Esto nos va a decir exactamente qué está pasando
-        console.error("Error Chatwoot:", error.response?.data || error.message);
-        res.status(200).send("Error: " + JSON.stringify(error.response?.data || error.message));
+        // Esto nos va a decir si es un error de ID o de Token
+        res.status(200).send("Error Chatwoot detallado: " + JSON.stringify(error.response?.data || error.message));
     }
 });
 
