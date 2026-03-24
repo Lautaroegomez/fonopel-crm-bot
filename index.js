@@ -22,7 +22,7 @@ app.all('/webhook', async (req, res) => {
 
     try {
         // 1. Gemini Clasifica
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const prompt = `Sos el clasificador de Tienda Fonopel. Analizá y respondé SOLO: VENTAS, SOPORTE o ADMIN. Mensaje: "${mensaje}"`;
         const result = await model.generateContent(prompt);
         const categoria = result.response.text().trim();
