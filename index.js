@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const app = express();
 app.use(express.json());
 
+// Forzamos la configuración de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.all('/webhook', async (req, res) => {
@@ -16,24 +17,30 @@ app.all('/webhook', async (req, res) => {
     const accId = process.env.CHATWOOT_ACCOUNT_ID.trim();
     const inboxId = Number(process.env.CHATWOOT_INBOX_ID.trim());
 
-    try {
-        // 1. CLASIFICACIÓN GEMINI
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent(`Clasificá en una palabra (VENTAS, SOPORTE o ADMIN): ${mensaje}`);
-        const categoria = result.response.text().trim().toUpperCase().split(/\s+/)[0];
+    let categoria = "GENERAL";
 
-        // 2. CREAR O BUSCAR CONTACTO (Esto evita el 404)
+    // 1. INTENTO DE CLASIFICACIÓN (Con salvavidas)
+    try {
+        // Usamos gemini-1.5-flash-latest que es la versión más compatible
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        const result = await model.generateContent(`Clasificá en una palabra (VENTAS, SOPORTE o ADMIN): ${mensaje}`);
+        const textResponse = result.response.text().trim().toUpperCase();
+        categoria = textResponse.split(/\s+/)[0].replace(/[^A-Z]/g, '');
+    } catch (e) {
+        console.log("Gemini falló, pero seguimos adelante...");
+    }
+
+    try {
+        // 2. CREAR O BUSCAR CONTACTO
         const contactRes = await axios.post(`https://app.chatwoot.com/api/v1/accounts/${accId}/contacts`, {
             name: nombre,
             phone_number: `+${telefono}`,
             inbox_id: inboxId
-        }, config).catch(e => e.response); // Si ya existe, nos da el dato igual
+        }, config).catch(e => e.response);
 
-        const contactSourceId = contactRes.data?.payload?.contact_inboxes?.[0]?.source_id || telefono;
-
-        // 3. CREAR CONVERSACIÓN Y MENSAJE
+        // 3. CREAR CONVERSACIÓN
         await axios.post(`https://app.chatwoot.com/api/v1/accounts/${accId}/conversations`, {
-            source_id: contactSourceId,
+            source_id: telefono,
             inbox_id: inboxId,
             message: { content: `[${categoria}] ${mensaje}`, message_type: "incoming" }
         }, config);
@@ -41,8 +48,7 @@ app.all('/webhook', async (req, res) => {
         res.json({ status: "success" });
 
     } catch (error) {
-        console.error("Error:", error.response?.data || error.message);
-        res.status(200).send("Error Final: " + JSON.stringify(error.response?.data || error.message));
+        res.status(200).send("Error Chatwoot: " + JSON.stringify(error.response?.data || error.message));
     }
 });
 
