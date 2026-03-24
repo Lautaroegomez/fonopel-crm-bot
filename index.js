@@ -1,12 +1,8 @@
 const express = require('express');
 const axios = require('axios');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const app = express();
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Mapa de opciones -> labels
 const OPCIONES = {
     "1": { label: "posventa-ml", texto: "Posventa Mercado Libre" },
     "2": { label: "compras",     texto: "Comprar articulos" },
@@ -15,9 +11,6 @@ const OPCIONES = {
 };
 
 const MENU = `Hola! Bienvenido a Fonopel. En que podemos ayudarte?\n\n1 - Posventa Mercado Libre\n2 - Comprar articulos\n3 - Solicitar Factura\n4 - Cotizacion mayorista\n\nResponde con el numero de tu opcion.`;
-
-// Estado simple en memoria
-const sesiones = {};
 
 app.all('/webhook', async (req, res) => {
     const mensaje  = (req.body.message  || req.query.message  || "").trim();
@@ -41,16 +34,13 @@ app.all('/webhook', async (req, res) => {
 
         try {
             const searchRes = await axios.get(
-                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`,
-                config
+                `${base}/contacts/search?q=%2B${telefono}&include_contacts=true`, config
             );
             const encontrados = searchRes.data.payload;
             if (encontrados && encontrados.length > 0) {
                 contactId = encontrados[0].id;
             }
-        } catch (e) {
-            console.log("Error buscando contacto:", e.message);
-        }
+        } catch (e) {}
 
         if (!contactId) {
             const contactRes = await axios.post(`${base}/contacts`, {
@@ -59,13 +49,39 @@ app.all('/webhook', async (req, res) => {
                 inbox_id: inboxId
             }, config);
             contactId = contactRes.data.id;
-            console.log("Contacto creado, ID:", contactId);
-        } else {
-            console.log("Contacto encontrado, ID:", contactId);
         }
 
-        // -- 2. BUSCAR O CREAR CONVERSACION -----------------
-        let convId = sesiones[telefono] || null;
+        // -- 2. BUSCAR CONVERSACION ABIERTA EN CHATWOOT -----
+        let convId = null;
+        let esperandoOpcion = false;
+
+        try {
+            const convsRes = await axios.get(
+                `${base}/contacts/${contactId}/conversations`, config
+            );
+            const conversaciones = convsRes.data.payload;
+
+            const abierta = conversaciones.find(c =>
+                c.status === "open" && c.inbox_id === inboxId
+            );
+
+            if (abierta) {
+                convId = abierta.id;
+
+                // Verificar si el bot ya mando el menu en esta conversacion
+                const mensajes = abierta.messages || [];
+                const yaManduMenu = mensajes.some(m =>
+                    m.message_type === 1 && m.content && m.content.includes("Posventa Mercado Libre")
+                );
+                if (yaManduMenu) {
+                    esperandoOpcion = true;
+                }
+
+                console.log("Conversacion abierta encontrada:", convId, "| Esperando opcion:", esperandoOpcion);
+            }
+        } catch (e) {
+            console.log("Error buscando conversaciones:", e.message);
+        }
 
         if (!convId) {
             const convRes = await axios.post(`${base}/conversations`, {
@@ -73,8 +89,7 @@ app.all('/webhook', async (req, res) => {
                 inbox_id: inboxId,
             }, config);
             convId = convRes.data.id;
-            sesiones[telefono] = convId;
-            console.log("Conversacion creada, ID:", convId);
+            console.log("Conversacion nueva creada:", convId);
         }
 
         // -- 3. REGISTRAR MENSAJE DEL CLIENTE ---------------
@@ -93,18 +108,28 @@ app.all('/webhook', async (req, res) => {
                 labels: [opcion.label]
             }, config);
 
-            // Confirmar al cliente
             await axios.post(`${base}/conversations/${convId}/messages`, {
-                content: `Entendido! Te asignamos al area de ${opcion.texto}. Un agente teatendera pronto.`,
+                content: `Entendido! Te asignamos al area de ${opcion.texto}. Un agente te atendera pronto.`,
                 message_type: "outgoing",
                 private: false
             }, config);
 
-            // Limpiar sesion para proxima conversacion
-            delete sesiones[telefono];
+            // Resolver la conversacion
+            await axios.patch(
+                `${base}/conversations/${convId}/toggle_status`,
+                { status: "resolved" }, config
+            );
+
+        } else if (esperandoOpcion) {
+            // Ya mando el menu pero el cliente no eligio opcion valida
+            await axios.post(`${base}/conversations/${convId}/messages`, {
+                content: `Por favor responde solo con el numero de tu opcion (1, 2, 3 o 4).`,
+                message_type: "outgoing",
+                private: false
+            }, config);
 
         } else {
-            // Cliente no eligio opcion valida -> mostrar menu
+            // Primera vez -> mandar menu
             await axios.post(`${base}/conversations/${convId}/messages`, {
                 content: MENU,
                 message_type: "outgoing",
