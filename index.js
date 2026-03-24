@@ -12,7 +12,7 @@ app.get('/', (req, res) => res.send('🚀 CRM Fonopel Online'));
 app.all('/webhook', async (req, res) => {
     const mensaje = req.body.message || req.query.message || "Hola";
     const nombre = req.body.contact_name || req.query.contact_name || "Cliente Prueba";
-    const telefono = req.body.contact_phone || req.query.contact_phone || "123456";
+    const telefono = req.body.contact_phone || req.query.contact_phone || "549341000111";
 
     let categoria = "PENDIENTE";
 
@@ -25,8 +25,7 @@ app.all('/webhook', async (req, res) => {
         console.log("Error Gemini:", e.message);
     }
 
-   try {
-        // Esta es la ruta que Chatwoot usa para recibir mensajes externos
+    try {
         const chatwootUrl = `https://app.chatwoot.com/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/inboxes/${process.env.CHATWOOT_INBOX_ID}/contacts`;
         
         await axios.post(chatwootUrl, {
@@ -37,20 +36,10 @@ app.all('/webhook', async (req, res) => {
             headers: { 'api_access_token': process.env.CHATWOOT_TOKEN } 
         });
 
-        res.json({ status: "success", info: "¡Mensaje en Chatwoot!" });
-
+        res.json({ status: "success" });
     } catch (error) {
-        // Esto nos va a decir exactamente cuál de los dos IDs está mal
-        console.error("Error detallado:", error.response?.data || error.message);
-        res.status(200).send("Revisá los IDs en Railway: " + JSON.stringify(error.response?.data || error.message));
-    } 
-        });
-
-        res.json({ status: "success", info: "¡Por fin en Chatwoot!" });
-
-    } catch (error) {
-        // Esto nos va a decir si es un error de ID o de Token
-        res.status(200).send("Error Chatwoot detallado: " + JSON.stringify(error.response?.data || error.message));
+        console.error("Error Chatwoot:", error.response?.data || error.message);
+        res.status(200).send("Error: " + JSON.stringify(error.response?.data || error.message));
     }
 });
 
