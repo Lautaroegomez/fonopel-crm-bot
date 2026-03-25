@@ -1,37 +1,53 @@
 const express = require('express');
 const axios = require('axios');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 const app = express();
 app.use(express.json());
 
-app.all('/webhook', async (req, res) => {
-    console.log("--- NUEVO MENSAJE RECIBIDO ---");
-    console.log("Cuerpo del mensaje:", JSON.stringify(req.body, null, 2));
+// Configuración de las APIs
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const chatwootToken = process.env.CHATWOOT_TOKEN;
+const chatwootUrl = "https://app.chatwoot.com/api/v1";
+const accountId = process.env.CHATWOOT_ACCOUNT_ID;
 
-    if (req.body.message_type === 'outgoing' || req.body.sender_type === 'bot') {
-        return res.json({ status: "ignored" });
-    }
+app.post('/webhook', async (req, res) => {
+    const data = req.body;
 
-    const content = req.body.content;
-    const convId = req.body.conversation?.id;
+    // Solo procesamos mensajes entrantes de clientes
+    if (data.event === "message_created" && data.message_type === "incoming") {
+        const conversationId = data.conversation.id;
+        const messageContent = data.content;
 
-    if (content && convId) {
-        console.log("Respondiendo a la conversación:", convId);
+        console.log(`--- Procesando mensaje de Tienda Fonopel: "${messageContent}" ---`);
+
         try {
-            const accId = process.env.CHATWOOT_ACCOUNT_ID.trim();
-            const base = `https://app.chatwoot.com/api/v1/accounts/${accId}`;
-            const config = { headers: { 'api_access_token': process.env.CHATWOOT_TOKEN.trim() } };
+            // 1. Consultamos a Gemini para clasificar el mensaje
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const prompt = `Analiza este mensaje de un cliente de una tienda de bindeadoras y papelería llamada "Tienda Fonopel". 
+            Clasifícalo en UNA SOLA palabra de estas tres: "Venta", "Soporte", "Reclamo". 
+            Mensaje: "${messageContent}"`;
 
-            await axios.post(`${base}/conversations/${convId}/messages`, {
-                content: "🤖 Bot activo: He recibido tu mensaje.",
-                message_type: "outgoing"
-            }, config);
-            console.log("Respuesta enviada con éxito.");
-        } catch (e) {
-            console.error("ERROR AL ENVIAR RESPUESTA:", e.response?.data || e.message);
+            const result = await model.generateContent(prompt);
+            const classification = result.response.text().trim();
+            console.log(`IA Clasificó como: ${classification}`);
+
+            // 2. Le ponemos la etiqueta a la conversación en Chatwoot
+            await axios.post(
+                `${chatwootUrl}/accounts/${accountId}/conversations/${conversationId}/labels`,
+                { labels: [classification] },
+                { headers: { 'api_access_token': chatwootToken } }
+            );
+
+            console.log(`Etiqueta "${classification}" aplicada con éxito.`);
+
+        } catch (error) {
+            console.error("Error procesando con IA:", error.response ? error.response.data : error.message);
         }
     }
 
-    res.json({ status: "success" });
+    res.status(200).send("OK");
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("Servidor escuchando..."));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`Cerebro de Fonopel activo en puerto ${PORT}`));
