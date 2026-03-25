@@ -19,7 +19,7 @@ app.all('*', async (req, res) => {
 
         try {
             // ✅ Modelo actualizado: gemini-2.0-flash (reemplaza al deprecado gemini-pro)
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${GEMINI_KEY}`;
 
             const geminiResponse = await axios.post(geminiUrl, {
                 contents: [{
