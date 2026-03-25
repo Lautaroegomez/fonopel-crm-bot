@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-
 const app = express();
 app.use(express.json());
 
@@ -19,9 +18,9 @@ app.all('*', async (req, res) => {
         console.log(`--- Procesando para Tienda Fonopel: "${messageContent}" ---`);
 
         try {
-            // CAMBIO A GEMINI-PRO (El modelo más compatible de todos)
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_KEY}`;
-            
+            // ✅ Modelo actualizado: gemini-2.0-flash (reemplaza al deprecado gemini-pro)
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+
             const geminiResponse = await axios.post(geminiUrl, {
                 contents: [{
                     parts: [{
@@ -41,7 +40,7 @@ app.all('*', async (req, res) => {
                 { headers: { 'api_access_token': CHATWOOT_TOKEN, 'Content-Type': 'application/json' } }
             );
 
-            console.log(`✅ ¡POR FIN! Etiqueta "${classification}" aplicada con éxito.`);
+            console.log(`✅ Etiqueta "${classification}" aplicada con éxito.`);
 
         } catch (error) {
             console.error("❌ Error en el proceso:");
@@ -52,6 +51,7 @@ app.all('*', async (req, res) => {
             }
         }
     }
+
     res.status(200).send("OK");
 });
 
