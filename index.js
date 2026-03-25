@@ -32,7 +32,7 @@ async function clasificarMensaje(mensaje) {
         }
     );
 
-    return response.data.content[0].text.trim().replace(/[^a-zA-Z]/g, "");
+    return response.data.content[0].text.trim().replace(/[^a-zA-Z]/g, "").toLowerCase();
 }
 
 // ── Función para aplicar etiqueta en Chatwoot ─────────────────────────────────
