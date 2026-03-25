@@ -25,83 +25,59 @@ function estaEnHorario() {
 
 // -- Catalogo de productos con URLs -----------
 const CATALOGO = {
-    "espiraladora-doble-alambre": {
-        nombre: "Espiraladoras Doble Alambre",
-        url: "https://www.tiendafonopel.com.ar/espiraladora-doble-alambre/"
-    },
-    "espiraladora-plastico": {
-        nombre: "Espiraladoras para Espirales Plasticos",
-        url: "https://www.tiendafonopel.com.ar/espiraladoras/espiraladora-pvc/"
-    },
-    "guillotina": {
-        nombre: "Guillotinas",
-        url: "https://www.tiendafonopel.com.ar/guillotinas/"
-    },
-    "combo": {
-        nombre: "Combos",
-        url: "https://www.tiendafonopel.com.ar/combos/"
-    },
-    "tapa": {
-        nombre: "Tapas de Polipropileno",
-        url: "https://www.tiendafonopel.com.ar/tapas-polipropileno/"
-    },
-    "espiral-doble-alambre": {
-        nombre: "Espirales Doble Alambre",
-        url: "https://www.tiendafonopel.com.ar/espirales-doble-alambre/"
-    },
-    "espiral-plastico": {
-        nombre: "Espirales Plasticos",
-        url: "https://www.tiendafonopel.com.ar/espirales-plasticos/"
-    },
-    "laminadora": {
-        nombre: "Plastificadoras y Laminadoras",
-        url: "https://www.tiendafonopel.com.ar/laminadora/"
-    },
-    "contadora-billetes": {
-        nombre: "Contadoras de Billetes",
-        url: "https://www.tiendafonopel.com.ar/contadoras-de-billetes/"
-    },
-    "caja-archivo": {
-        nombre: "Cajas de Archivo",
-        url: "https://www.tiendafonopel.com.ar/cajas-de-archivo/"
-    },
-    "general": {
-        nombre: "Tienda Fonopel",
-        url: "https://www.tiendafonopel.com.ar/"
-    }
+    "espiraladora-doble-alambre": { nombre: "Espiraladoras Doble Alambre", url: "https://www.tiendafonopel.com.ar/espiraladora-doble-alambre/" },
+    "espiraladora-plastico":      { nombre: "Espiraladoras para Espirales Plasticos", url: "https://www.tiendafonopel.com.ar/espiraladoras/espiraladora-pvc/" },
+    "guillotina":                 { nombre: "Guillotinas", url: "https://www.tiendafonopel.com.ar/guillotinas/" },
+    "combo":                      { nombre: "Combos", url: "https://www.tiendafonopel.com.ar/combos/" },
+    "tapa":                       { nombre: "Tapas de Polipropileno", url: "https://www.tiendafonopel.com.ar/tapas-polipropileno/" },
+    "espiral-doble-alambre":      { nombre: "Espirales Doble Alambre", url: "https://www.tiendafonopel.com.ar/espirales-doble-alambre/" },
+    "espiral-plastico":           { nombre: "Espirales Plasticos", url: "https://www.tiendafonopel.com.ar/espirales-plasticos/" },
+    "laminadora":                 { nombre: "Plastificadoras y Laminadoras", url: "https://www.tiendafonopel.com.ar/laminadora/" },
+    "contadora-billetes":         { nombre: "Contadoras de Billetes", url: "https://www.tiendafonopel.com.ar/contadoras-de-billetes/" },
+    "caja-archivo":               { nombre: "Cajas de Archivo", url: "https://www.tiendafonopel.com.ar/cajas-de-archivo/" },
+    "general":                    { nombre: "Tienda Fonopel", url: "https://www.tiendafonopel.com.ar/" }
 };
 
 // -- Clasificar mensaje con Claude ------------
+// Ahora devuelve MULTIPLES categorias si el mensaje las tiene
 async function clasificarMensaje(mensaje) {
     const response = await axios.post(
         "https://api.anthropic.com/v1/messages",
         {
             model: "claude-haiku-4-5",
-            max_tokens: 50,
+            max_tokens: 100,
             messages: [{
                 role: "user",
-                content: `Sos un clasificador de mensajes para Tienda Fonopel. Tu unica tarea es clasificar el mensaje del cliente en UNA categoria. Devuelve UNICAMENTE un JSON sin texto adicional ni backticks.
+                content: `Sos un clasificador de mensajes para Tienda Fonopel. Analizá el mensaje y detecta TODAS las categorias que aplican (puede ser mas de una). Devuelve UNICAMENTE un JSON sin texto adicional ni backticks.
 
-CATEGORIAS Y EJEMPLOS:
-- "reclamo": el cliente se queja, quiere devolver algo, tuvo problema, menciona reclamo, queja, devolucion, mal funcionamiento, estafa, inconveniente
-  Ejemplos: "quiero hacer un reclamo", "me llego roto", "quiero devolver", "tuve un problema con mi compra", "no funciona lo que compre"
-
-- "venta": quiere comprar, pregunta precio, disponibilidad, consulta por un producto sin problema previo
+CATEGORIAS:
+- "venta": quiere comprar, pregunta precio o disponibilidad de producto
   Ejemplos: "cuanto sale la guillotina", "tienen espirales", "quiero comprar", "precio de laminadora"
 
-- "soporte": tiene problema tecnico con un producto que ya tiene, necesita ayuda para usarlo
+- "soporte": tiene problema tecnico con un producto que ya tiene
   Ejemplos: "como se usa", "no enciende", "necesito ayuda tecnica", "se trabo la maquina"
 
+- "reclamo": se queja, quiere devolver, mala experiencia, inconveniente
+  Ejemplos: "quiero hacer un reclamo", "me llego roto", "quiero devolver", "no funciona lo que compre"
+
 - "posventa-mercadolibre": hizo una compra por Mercado Libre
-  Ejemplos: "compre por ML", "mi pedido de mercado libre", "compra en mercadolibre"
+  Ejemplos: "compre por ML", "mi pedido de mercado libre", "hice una compra en mercadolibre"
 
 - "administrativo": necesita factura, ticket, comprobante, datos fiscales
-  Ejemplos: "necesito factura", "me pueden dar el ticket", "comprobante de pago", "datos para facturar"
+  Ejemplos: "necesito factura", "me pueden dar el ticket", "comprobante de pago", "necesito la factura de mi compra"
+
+IMPORTANTE: Un mensaje puede tener MULTIPLES categorias. Ejemplo:
+- "hice una compra por mercado libre y necesito la factura" -> ["posventa-mercadolibre", "administrativo"]
+- "compre una guillotina y no funciona" -> ["soporte", "reclamo"]
+- "quiero comprar una espiraladora" -> ["venta"]
+
+PRODUCTOS (elegir el mas relacionado, o "general" si no menciona producto):
+espiraladora-doble-alambre, espiraladora-plastico, guillotina, combo, tapa, espiral-doble-alambre, espiral-plastico, laminadora, contadora-billetes, caja-archivo, general
 
 Mensaje del cliente: "${mensaje}"
 
 Responde UNICAMENTE con este JSON:
-{"categoria": "reclamo|venta|soporte|posventa-mercadolibre|administrativo", "producto": "espiraladora-doble-alambre|espiraladora-plastico|guillotina|combo|tapa|espiral-doble-alambre|espiral-plastico|laminadora|contadora-billetes|caja-archivo|general"}`
+{"categorias": ["categoria1", "categoria2"], "producto": "nombre-producto"}`
             }]
         },
         {
@@ -118,13 +94,20 @@ Responde UNICAMENTE con este JSON:
         const parsed = JSON.parse(texto);
         const categoriasValidas = ["venta", "soporte", "reclamo", "posventa-mercadolibre", "administrativo"];
         const productosValidos  = Object.keys(CATALOGO);
-        return {
-            categoria: categoriasValidas.includes(parsed.categoria) ? parsed.categoria : "venta",
-            producto:  productosValidos.includes(parsed.producto)   ? parsed.producto  : "general"
-        };
+
+        // Filtrar solo categorias validas
+        const categorias = (parsed.categorias || []).filter(c => categoriasValidas.includes(c));
+        const producto   = productosValidos.includes(parsed.producto) ? parsed.producto : "general";
+
+        // Si no detecto ninguna categoria valida, usar venta por defecto
+        if (categorias.length === 0) categorias.push("venta");
+
+        console.log(`Categorias detectadas: ${categorias.join(", ")} | Producto: ${producto}`);
+        return { categorias, producto };
+
     } catch (e) {
         console.log("Error parseando JSON de Claude:", e.message);
-        return { categoria: "venta", producto: "general" };
+        return { categorias: ["venta"], producto: "general" };
     }
 }
 
@@ -167,12 +150,17 @@ async function yaFueSaludado(conversationId) {
     }
 }
 
-// -- Armar mensaje segun categoria y producto -
-function armarMensaje(categoria, producto, enHorario) {
+// -- Armar mensaje segun categorias y producto
+// Usa la primera categoria para el mensaje principal
+function armarMensaje(categorias, producto, enHorario) {
     const item = CATALOGO[producto] || CATALOGO["general"];
     const linkProducto = producto !== "general"
         ? `\n\nPodes ver todos nuestros ${item.nombre} aca: ${item.url}`
         : `\n\nPodes ver todos nuestros productos en nuestra tienda: ${item.url}`;
+
+    // Prioridad de mensaje: reclamo > administrativo > posventa-ml > soporte > venta
+    const prioridad = ["reclamo", "administrativo", "posventa-mercadolibre", "soporte", "venta"];
+    const categoriaPrincipal = prioridad.find(p => categorias.includes(p)) || "venta";
 
     const cuerpos = {
         venta: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre una compra y en breve un asesor te va a atender para ayudarte a elegir el mejor producto.${linkProducto}`,
@@ -182,7 +170,7 @@ function armarMensaje(categoria, producto, enHorario) {
         administrativo: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu solicitud de factura o comprobante. Nuestro equipo administrativo la va a procesar a la brevedad.\n\nSi tenes el numero de orden o fecha de compra, compartilo para agilizar el tramite.`
     };
 
-    let mensaje = cuerpos[categoria] || cuerpos.venta;
+    let mensaje = cuerpos[categoriaPrincipal] || cuerpos.venta;
 
     if (!enHorario) {
         mensaje += `\n\nTe avisamos que en este momento estamos fuera de horario. Nuestro horario de atencion es Lunes a Viernes de 9:00 a 17:00 hs. Tu mensaje quedo registrado y te respondemos en cuanto volvamos.`;
@@ -210,21 +198,20 @@ app.all('*', async (req, res) => {
             }
 
             // Verificar horario
-            const { enHorario, dia } = estaEnHorario();
+            const { enHorario } = estaEnHorario();
 
-            // Clasificar siempre, independientemente del horario
-            const { categoria, producto } = await clasificarMensaje(messageContent);
-            console.log(`Clasificado como: ${categoria} | Producto: ${producto}`);
+            // Clasificar (ahora devuelve multiples categorias)
+            const { categorias, producto } = await clasificarMensaje(messageContent);
 
-            // Armar etiquetas: siempre la categoria + fuera-de-horario si aplica
-            const etiquetas = [categoria];
+            // Armar etiquetas: todas las categorias detectadas + fuera-de-horario si aplica
+            const etiquetas = [...categorias];
             if (!enHorario) etiquetas.push("fuera-de-horario");
 
             await aplicarEtiquetas(conversationId, etiquetas);
             console.log(`Etiquetas aplicadas: ${etiquetas.join(", ")}`);
 
             // Armar y enviar mensaje
-            const mensaje = armarMensaje(categoria, producto, enHorario);
+            const mensaje = armarMensaje(categorias, producto, enHorario);
             await enviarMensaje(conversationId, mensaje);
             console.log("Mensaje enviado al cliente.");
 
