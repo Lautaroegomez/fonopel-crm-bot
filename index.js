@@ -80,22 +80,28 @@ async function clasificarMensaje(mensaje) {
             max_tokens: 50,
             messages: [{
                 role: "user",
-                content: `Analizá este mensaje de un cliente de Tienda Fonopel y devolvé UNICAMENTE un JSON con dos campos, sin texto adicional ni backticks:
-{
-  "categoria": "venta|soporte|reclamo|posventa-mercadolibre|administrativo",
-  "producto": "espiraladora-doble-alambre|espiraladora-plastico|guillotina|combo|tapa|espiral-doble-alambre|espiral-plastico|laminadora|contadora-billetes|caja-archivo|general"
-}
+                content: `Sos un clasificador de mensajes para Tienda Fonopel. Tu unica tarea es clasificar el mensaje del cliente en UNA categoria. Devuelve UNICAMENTE un JSON sin texto adicional ni backticks.
 
-Categorias:
-- venta: quiere comprar, pregunta precio o disponibilidad
-- soporte: problema tecnico, producto no funciona
-- reclamo: queja, devolucion, mala experiencia
-- posventa-mercadolibre: compra hecha por Mercado Libre
-- administrativo: necesita factura, ticket o comprobante
+CATEGORIAS Y EJEMPLOS:
+- "reclamo": el cliente se queja, quiere devolver algo, tuvo problema, menciona reclamo, queja, devolucion, mal funcionamiento, estafa, inconveniente
+  Ejemplos: "quiero hacer un reclamo", "me llego roto", "quiero devolver", "tuve un problema con mi compra", "no funciona lo que compre"
 
-Productos: elegir el mas relacionado al mensaje. Si no menciona ningun producto especifico, usar "general".
+- "venta": quiere comprar, pregunta precio, disponibilidad, consulta por un producto sin problema previo
+  Ejemplos: "cuanto sale la guillotina", "tienen espirales", "quiero comprar", "precio de laminadora"
 
-Mensaje: "${mensaje}"`
+- "soporte": tiene problema tecnico con un producto que ya tiene, necesita ayuda para usarlo
+  Ejemplos: "como se usa", "no enciende", "necesito ayuda tecnica", "se trabo la maquina"
+
+- "posventa-mercadolibre": hizo una compra por Mercado Libre
+  Ejemplos: "compre por ML", "mi pedido de mercado libre", "compra en mercadolibre"
+
+- "administrativo": necesita factura, ticket, comprobante, datos fiscales
+  Ejemplos: "necesito factura", "me pueden dar el ticket", "comprobante de pago", "datos para facturar"
+
+Mensaje del cliente: "${mensaje}"
+
+Responde UNICAMENTE con este JSON:
+{"categoria": "reclamo|venta|soporte|posventa-mercadolibre|administrativo", "producto": "espiraladora-doble-alambre|espiraladora-plastico|guillotina|combo|tapa|espiral-doble-alambre|espiral-plastico|laminadora|contadora-billetes|caja-archivo|general"}`
             }]
         },
         {
@@ -152,7 +158,7 @@ async function yaFueSaludado(conversationId) {
             m.message_type === 1 &&
             m.content &&
             (m.content.includes("Gracias por contactarte con Tienda Fonopel") ||
-             m.content.includes("fuera de nuestro horario") ||
+             m.content.includes("fuera de horario") ||
              m.content.includes("fin de semana"))
         );
     } catch (e) {
@@ -168,15 +174,15 @@ function armarMensaje(categoria, producto, enHorario) {
         ? `\n\nPodes ver todos nuestros ${item.nombre} aca: ${item.url}`
         : `\n\nPodes ver todos nuestros productos en nuestra tienda: ${item.url}`;
 
-    const prefijos = {
-        venta: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre una compra y en breve un asesor te va a atender.${linkProducto}`,
+    const cuerpos = {
+        venta: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre una compra y en breve un asesor te va a atender para ayudarte a elegir el mejor producto.${linkProducto}`,
         soporte: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta de soporte tecnico. Un especialista va a revisar tu caso a la brevedad.\n\nSi tenes el numero de orden o factura a mano, tenerlo listo va a agilizar la atencion.`,
-        reclamo: `Hola! Lamentamos los inconvenientes que tuviste.\n\nRecibimos tu reclamo y lo vamos a gestionar con prioridad. Un asesor va a contactarte a la brevedad.`,
+        reclamo: `Hola! Lamentamos los inconvenientes que tuviste.\n\nRecibimos tu reclamo y lo vamos a gestionar con prioridad. Un asesor va a contactarte a la brevedad para resolverlo.\n\nTe pedimos disculpas por las molestias causadas.`,
         "posventa-mercadolibre": `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre tu compra en Mercado Libre. Un asesor especializado en posventa va a revisar tu caso.\n\nSi tenes el numero de orden de ML a mano, compartilo para agilizar la atencion.`,
         administrativo: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu solicitud de factura o comprobante. Nuestro equipo administrativo la va a procesar a la brevedad.\n\nSi tenes el numero de orden o fecha de compra, compartilo para agilizar el tramite.`
     };
 
-    let mensaje = prefijos[categoria] || prefijos.venta;
+    let mensaje = cuerpos[categoria] || cuerpos.venta;
 
     if (!enHorario) {
         mensaje += `\n\nTe avisamos que en este momento estamos fuera de horario. Nuestro horario de atencion es Lunes a Viernes de 9:00 a 17:00 hs. Tu mensaje quedo registrado y te respondemos en cuanto volvamos.`;
@@ -203,6 +209,7 @@ app.all('*', async (req, res) => {
                 return res.status(200).send("OK");
             }
 
+            // Verificar horario
             const { enHorario, dia } = estaEnHorario();
 
             // Clasificar siempre, independientemente del horario
