@@ -10,11 +10,7 @@ const ACCOUNT_ID     = process.env.CHATWOOT_ACCOUNT_ID;
 const CHATWOOT_URL   = "https://app.chatwoot.com/api/v1";
 
 // -- Horario de atencion (Argentina GMT-3) -----
-const HORARIO = {
-    dias: [1, 2, 3, 4, 5],
-    horaInicio: 9,
-    horaFin: 17
-};
+const HORARIO = { dias: [1, 2, 3, 4, 5], horaInicio: 9, horaFin: 17 };
 
 function estaEnHorario() {
     const ahora = new Date();
@@ -22,28 +18,58 @@ function estaEnHorario() {
     const argentina = new Date(utc + (-3 * 60) * 60000);
     const dia  = argentina.getDay();
     const hora = argentina.getHours();
-    const diaHabil  = HORARIO.dias.includes(dia);
-    const horaHabil = hora >= HORARIO.horaInicio && hora < HORARIO.horaFin;
-    console.log(`Hora Argentina: ${argentina.toLocaleString()} | En horario: ${diaHabil && horaHabil}`);
-    return { enHorario: diaHabil && horaHabil, dia };
+    const enHorario = HORARIO.dias.includes(dia) && hora >= HORARIO.horaInicio && hora < HORARIO.horaFin;
+    console.log(`Hora Argentina: ${argentina.toLocaleString()} | En horario: ${enHorario}`);
+    return { enHorario, dia };
 }
 
-// -- Mensajes por clasificacion ---------------
-const MENSAJES = {
-    venta: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre una compra y en breve un asesor te va a atender para ayudarte a elegir el mejor producto.\n\nMientras esperás, podes ver nuestro catalogo completo en nuestra tienda de Mercado Libre.`,
-
-    soporte: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta de soporte tecnico. Un especialista va a revisar tu caso y te va a dar una solucion a la brevedad.\n\nSi tenes el numero de orden o factura a mano, tenerlo listo va a agilizar la atencion.`,
-
-    reclamo: `Hola! Lamentamos los inconvenientes que tuviste.\n\nRecibimos tu reclamo y lo vamos a gestionar con prioridad. Un asesor va a contactarte a la brevedad para resolverlo.\n\nTe pedimos disculpas por las molestias causadas.`,
-
-    "posventa-mercadolibre": `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre tu compra en Mercado Libre. Un asesor especializado en posventa va a revisar tu caso y te va a responder a la brevedad.\n\nSi tenes el numero de orden de ML a mano, tenerlo listo va a agilizar la atencion.`,
-
-    administrativo: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu solicitud administrativa (factura, ticket o comprobante). Nuestro equipo administrativo va a procesarla y te va a enviar lo que necesitas a la brevedad.\n\nSi tenes el numero de orden o fecha de compra a mano, compartilo para agilizar el tramite.`
+// -- Catalogo de productos con URLs -----------
+const CATALOGO = {
+    "espiraladora-doble-alambre": {
+        nombre: "Espiraladoras Doble Alambre",
+        url: "https://www.tiendafonopel.com.ar/espiraladora-doble-alambre/"
+    },
+    "espiraladora-plastico": {
+        nombre: "Espiraladoras para Espirales Plasticos",
+        url: "https://www.tiendafonopel.com.ar/espiraladoras/espiraladora-pvc/"
+    },
+    "guillotina": {
+        nombre: "Guillotinas",
+        url: "https://www.tiendafonopel.com.ar/guillotinas/"
+    },
+    "combo": {
+        nombre: "Combos",
+        url: "https://www.tiendafonopel.com.ar/combos/"
+    },
+    "tapa": {
+        nombre: "Tapas de Polipropileno",
+        url: "https://www.tiendafonopel.com.ar/tapas-polipropileno/"
+    },
+    "espiral-doble-alambre": {
+        nombre: "Espirales Doble Alambre",
+        url: "https://www.tiendafonopel.com.ar/espirales-doble-alambre/"
+    },
+    "espiral-plastico": {
+        nombre: "Espirales Plasticos",
+        url: "https://www.tiendafonopel.com.ar/espirales-plasticos/"
+    },
+    "laminadora": {
+        nombre: "Plastificadoras y Laminadoras",
+        url: "https://www.tiendafonopel.com.ar/laminadora/"
+    },
+    "contadora-billetes": {
+        nombre: "Contadoras de Billetes",
+        url: "https://www.tiendafonopel.com.ar/contadoras-de-billetes/"
+    },
+    "caja-archivo": {
+        nombre: "Cajas de Archivo",
+        url: "https://www.tiendafonopel.com.ar/cajas-de-archivo/"
+    },
+    "general": {
+        nombre: "Tienda Fonopel",
+        url: "https://www.tiendafonopel.com.ar/"
+    }
 };
-
-const MENSAJE_FUERA_HORARIO = `Hola! Gracias por contactarte con Tienda Fonopel.\n\nEn este momento estamos fuera de nuestro horario de atencion.\n\nHorario: Lunes a Viernes de 9:00 a 17:00 hs.\n\nEn cuanto retomemos la actividad, un asesor te va a responder. Tu mensaje quedo registrado.`;
-
-const MENSAJE_FINDE = `Hola! Gracias por contactarte con Tienda Fonopel.\n\nEn este momento no estamos disponibles porque es fin de semana.\n\nHorario de atencion: Lunes a Viernes de 9:00 a 17:00 hs.\n\nEl lunes a primera hora un asesor te va a responder.`;
 
 // -- Clasificar mensaje con Claude ------------
 async function clasificarMensaje(mensaje) {
@@ -51,22 +77,26 @@ async function clasificarMensaje(mensaje) {
         "https://api.anthropic.com/v1/messages",
         {
             model: "claude-haiku-4-5",
-            max_tokens: 20,
-            messages: [
-                {
-                    role: "user",
-                    content: `Clasificá este mensaje de un cliente de Tienda Fonopel en UNA SOLA PALABRA, sin puntuacion ni espacios. Las categorias posibles son exactamente estas cinco:
-- "venta" → quiere comprar algo, pregunta por precio, disponibilidad o productos
-- "soporte" → tiene un problema tecnico, el producto no funciona, necesita ayuda tecnica
-- "reclamo" → esta enojado, quiere devolver algo, tuvo una mala experiencia
-- "posventa-mercadolibre" → hizo una compra por Mercado Libre y tiene una consulta o problema con ese pedido
-- "administrativo" → necesita factura, ticket, comprobante de pago o algun tramite administrativo
+            max_tokens: 50,
+            messages: [{
+                role: "user",
+                content: `Analizá este mensaje de un cliente de Tienda Fonopel y devolvé UNICAMENTE un JSON con dos campos, sin texto adicional ni backticks:
+{
+  "categoria": "venta|soporte|reclamo|posventa-mercadolibre|administrativo",
+  "producto": "espiraladora-doble-alambre|espiraladora-plastico|guillotina|combo|tapa|espiral-doble-alambre|espiral-plastico|laminadora|contadora-billetes|caja-archivo|general"
+}
 
-Mensaje del cliente: "${mensaje}"
+Categorias:
+- venta: quiere comprar, pregunta precio o disponibilidad
+- soporte: problema tecnico, producto no funciona
+- reclamo: queja, devolucion, mala experiencia
+- posventa-mercadolibre: compra hecha por Mercado Libre
+- administrativo: necesita factura, ticket o comprobante
 
-Responde UNICAMENTE con una de estas palabras: venta, soporte, reclamo, posventa-mercadolibre, administrativo`
-                }
-            ]
+Productos: elegir el mas relacionado al mensaje. Si no menciona ningun producto especifico, usar "general".
+
+Mensaje: "${mensaje}"`
+            }]
         },
         {
             headers: {
@@ -77,18 +107,26 @@ Responde UNICAMENTE con una de estas palabras: venta, soporte, reclamo, posventa
         }
     );
 
-    const texto = response.data.content[0].text.trim().toLowerCase();
-    // Validar que sea una categoria valida
-    const categorias = ["venta", "soporte", "reclamo", "posventa-mercadolibre", "administrativo"];
-    const encontrada = categorias.find(c => texto.includes(c));
-    return encontrada || "venta";
+    try {
+        const texto = response.data.content[0].text.trim();
+        const parsed = JSON.parse(texto);
+        const categoriasValidas = ["venta", "soporte", "reclamo", "posventa-mercadolibre", "administrativo"];
+        const productosValidos  = Object.keys(CATALOGO);
+        return {
+            categoria: categoriasValidas.includes(parsed.categoria) ? parsed.categoria : "venta",
+            producto:  productosValidos.includes(parsed.producto)   ? parsed.producto  : "general"
+        };
+    } catch (e) {
+        console.log("Error parseando JSON de Claude:", e.message);
+        return { categoria: "venta", producto: "general" };
+    }
 }
 
-// -- Aplicar etiqueta en Chatwoot -------------
-async function aplicarEtiqueta(conversationId, etiqueta) {
+// -- Aplicar etiquetas en Chatwoot ------------
+async function aplicarEtiquetas(conversationId, etiquetas) {
     await axios.post(
         `${CHATWOOT_URL}/accounts/${ACCOUNT_ID}/conversations/${conversationId}/labels`,
-        { labels: [etiqueta] },
+        { labels: etiquetas },
         { headers: { "api_access_token": CHATWOOT_TOKEN, "Content-Type": "application/json" } }
     );
 }
@@ -110,19 +148,41 @@ async function yaFueSaludado(conversationId) {
             { headers: { "api_access_token": CHATWOOT_TOKEN } }
         );
         const mensajes = res.data.payload || [];
-        const yaHayRespuesta = mensajes.some(m =>
+        return mensajes.some(m =>
             m.message_type === 1 &&
             m.content &&
             (m.content.includes("Gracias por contactarte con Tienda Fonopel") ||
              m.content.includes("fuera de nuestro horario") ||
              m.content.includes("fin de semana"))
         );
-        console.log(`Conversacion ${conversationId} - Ya saludado: ${yaHayRespuesta}`);
-        return yaHayRespuesta;
     } catch (e) {
         console.log("Error verificando historial:", e.message);
         return false;
     }
+}
+
+// -- Armar mensaje segun categoria y producto -
+function armarMensaje(categoria, producto, enHorario) {
+    const item = CATALOGO[producto] || CATALOGO["general"];
+    const linkProducto = producto !== "general"
+        ? `\n\nPodes ver todos nuestros ${item.nombre} aca: ${item.url}`
+        : `\n\nPodes ver todos nuestros productos en nuestra tienda: ${item.url}`;
+
+    const prefijos = {
+        venta: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre una compra y en breve un asesor te va a atender.${linkProducto}`,
+        soporte: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta de soporte tecnico. Un especialista va a revisar tu caso a la brevedad.\n\nSi tenes el numero de orden o factura a mano, tenerlo listo va a agilizar la atencion.`,
+        reclamo: `Hola! Lamentamos los inconvenientes que tuviste.\n\nRecibimos tu reclamo y lo vamos a gestionar con prioridad. Un asesor va a contactarte a la brevedad.`,
+        "posventa-mercadolibre": `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu consulta sobre tu compra en Mercado Libre. Un asesor especializado en posventa va a revisar tu caso.\n\nSi tenes el numero de orden de ML a mano, compartilo para agilizar la atencion.`,
+        administrativo: `Hola! Gracias por contactarte con Tienda Fonopel.\n\nRecibimos tu solicitud de factura o comprobante. Nuestro equipo administrativo la va a procesar a la brevedad.\n\nSi tenes el numero de orden o fecha de compra, compartilo para agilizar el tramite.`
+    };
+
+    let mensaje = prefijos[categoria] || prefijos.venta;
+
+    if (!enHorario) {
+        mensaje += `\n\nTe avisamos que en este momento estamos fuera de horario. Nuestro horario de atencion es Lunes a Viernes de 9:00 a 17:00 hs. Tu mensaje quedo registrado y te respondemos en cuanto volvamos.`;
+    }
+
+    return mensaje;
 }
 
 // -- Webhook principal ------------------------
@@ -143,24 +203,23 @@ app.all('*', async (req, res) => {
                 return res.status(200).send("OK");
             }
 
-            // Verificar horario
             const { enHorario, dia } = estaEnHorario();
 
-            if (!enHorario) {
-                const esFinde = dia === 0 || dia === 6;
-                await enviarMensaje(conversationId, esFinde ? MENSAJE_FINDE : MENSAJE_FUERA_HORARIO);
-                await aplicarEtiqueta(conversationId, "fuera-de-horario");
-                console.log("Fuera de horario - mensaje enviado.");
-                return res.status(200).send("OK");
-            }
+            // Clasificar siempre, independientemente del horario
+            const { categoria, producto } = await clasificarMensaje(messageContent);
+            console.log(`Clasificado como: ${categoria} | Producto: ${producto}`);
 
-            // Clasificar y responder
-            const clasificacion = await clasificarMensaje(messageContent);
-            console.log(`Clasificado como: ${clasificacion}`);
+            // Armar etiquetas: siempre la categoria + fuera-de-horario si aplica
+            const etiquetas = [categoria];
+            if (!enHorario) etiquetas.push("fuera-de-horario");
 
-            await aplicarEtiqueta(conversationId, clasificacion);
-            await enviarMensaje(conversationId, MENSAJES[clasificacion]);
-            console.log(`Etiqueta "${clasificacion}" aplicada y mensaje enviado.`);
+            await aplicarEtiquetas(conversationId, etiquetas);
+            console.log(`Etiquetas aplicadas: ${etiquetas.join(", ")}`);
+
+            // Armar y enviar mensaje
+            const mensaje = armarMensaje(categoria, producto, enHorario);
+            await enviarMensaje(conversationId, mensaje);
+            console.log("Mensaje enviado al cliente.");
 
         } catch (error) {
             console.error("Error en el proceso:");
