@@ -38,46 +38,63 @@ const CATALOGO = {
     "general":                    { nombre: "Tienda Fonopel", url: "https://www.tiendafonopel.com.ar/" }
 };
 
-// -- Clasificar mensaje con Claude ------------
-// Ahora devuelve MULTIPLES categorias si el mensaje las tiene
-async function clasificarMensaje(mensaje) {
+// -- Reglas de clasificacion manual (PRIORITARIAS antes de llamar a Claude)
+function clasificacionManual(mensaje) {
+    const m = mensaje.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    // Administrativo - palabras clave muy especificas
+    const palabrasAdmin = ["factura", "ticket", "comprobante", "recibo", "fiscal", "afip", "cuit", "facturacion", "necesito la factura", "me mandan la factura", "datos fiscales"];
+    if (palabrasAdmin.some(p => m.includes(p))) return "administrativo";
+
+    // Posventa ML - palabras clave muy especificas
+    const palabrasML = ["mercado libre", "mercadolibre", " ml ", "compre en ml", "pedido de ml", "compra de ml", "envio de ml", "ml me", "por ml"];
+    if (palabrasML.some(p => m.includes(p))) return "posventa-mercadolibre";
+
+    // Reclamo
+    const palabrasReclamo = ["reclamo", "queja", "devolucion", "devolver", "roto", "danado", "no funciona", "no sirve", "mal estado", "problema con", "inconveniente", "estafa", "fraude"];
+    if (palabrasReclamo.some(p => m.includes(p))) return "reclamo";
+
+    // Soporte
+    const palabrasSoporte = ["no enciende", "como se usa", "ayuda tecnica", "no funciona", "se trabo", "error", "falla", "tutorial", "instrucciones", "manual"];
+    if (palabrasSoporte.some(p => m.includes(p))) return "soporte";
+
+    return null; // No detectado manualmente, usar Claude
+}
+
+// -- Clasificar mensaje con Claude (solo si la clasificacion manual no alcanza)
+async function clasificarConClaude(mensaje) {
     const response = await axios.post(
         "https://api.anthropic.com/v1/messages",
         {
-            model: "claude-haiku-4-5",
+            model: "claude-sonnet-4-20250514",
             max_tokens: 100,
             messages: [{
                 role: "user",
-                content: `Sos un clasificador de mensajes para Tienda Fonopel. Analizá el mensaje y detecta TODAS las categorias que aplican (puede ser mas de una). Devuelve UNICAMENTE un JSON sin texto adicional ni backticks.
+                content: `Sos un clasificador de mensajes para Tienda Fonopel que vende maquinaria de oficina. Analizá el mensaje y detecta TODAS las categorias que aplican. Devuelve UNICAMENTE un JSON sin texto adicional ni backticks.
 
-CATEGORIAS:
-- "venta": quiere comprar, pregunta precio o disponibilidad de producto
-  Ejemplos: "cuanto sale la guillotina", "tienen espirales", "quiero comprar", "precio de laminadora"
+CATEGORIAS (pueden aplicar varias a la vez):
+- "administrativo": el cliente pide factura, ticket, comprobante, recibo o datos fiscales. CUALQUIER mencion a factura = administrativo.
+- "posventa-mercadolibre": hizo o menciona una compra por Mercado Libre o ML.
+- "reclamo": se queja, quiere devolver, tuvo problema, menciona reclamo, producto roto o en mal estado.
+- "soporte": tiene un problema tecnico, necesita ayuda para usar un producto que ya tiene.
+- "venta": quiere comprar algo, pregunta precio o disponibilidad. SOLO si no hay otro motivo mas especifico.
 
-- "soporte": tiene problema tecnico con un producto que ya tiene
-  Ejemplos: "como se usa", "no enciende", "necesito ayuda tecnica", "se trabo la maquina"
+EJEMPLOS DE CLASIFICACION:
+- "necesito la factura" -> ["administrativo"]
+- "quiero la factura de mi compra" -> ["administrativo"]
+- "hice una compra por ML y necesito factura" -> ["posventa-mercadolibre", "administrativo"]
+- "quiero hacer un reclamo" -> ["reclamo"]
+- "cuanto sale la guillotina" -> ["venta"]
+- "compre una espiraladora y no funciona" -> ["soporte", "reclamo"]
+- "hola buen dia" -> ["venta"]
 
-- "reclamo": se queja, quiere devolver, mala experiencia, inconveniente
-  Ejemplos: "quiero hacer un reclamo", "me llego roto", "quiero devolver", "no funciona lo que compre"
-
-- "posventa-mercadolibre": hizo una compra por Mercado Libre
-  Ejemplos: "compre por ML", "mi pedido de mercado libre", "hice una compra en mercadolibre"
-
-- "administrativo": necesita factura, ticket, comprobante, datos fiscales
-  Ejemplos: "necesito factura", "me pueden dar el ticket", "comprobante de pago", "necesito la factura de mi compra"
-
-IMPORTANTE: Un mensaje puede tener MULTIPLES categorias. Ejemplo:
-- "hice una compra por mercado libre y necesito la factura" -> ["posventa-mercadolibre", "administrativo"]
-- "compre una guillotina y no funciona" -> ["soporte", "reclamo"]
-- "quiero comprar una espiraladora" -> ["venta"]
-
-PRODUCTOS (elegir el mas relacionado, o "general" si no menciona producto):
+PRODUCTOS (el mas relacionado al mensaje):
 espiraladora-doble-alambre, espiraladora-plastico, guillotina, combo, tapa, espiral-doble-alambre, espiral-plastico, laminadora, contadora-billetes, caja-archivo, general
 
-Mensaje del cliente: "${mensaje}"
+Mensaje: "${mensaje}"
 
-Responde UNICAMENTE con este JSON:
-{"categorias": ["categoria1", "categoria2"], "producto": "nombre-producto"}`
+JSON de respuesta:
+{"categorias": ["categoria1"], "producto": "nombre-producto"}`
             }]
         },
         {
@@ -94,21 +111,30 @@ Responde UNICAMENTE con este JSON:
         const parsed = JSON.parse(texto);
         const categoriasValidas = ["venta", "soporte", "reclamo", "posventa-mercadolibre", "administrativo"];
         const productosValidos  = Object.keys(CATALOGO);
-
-        // Filtrar solo categorias validas
         const categorias = (parsed.categorias || []).filter(c => categoriasValidas.includes(c));
         const producto   = productosValidos.includes(parsed.producto) ? parsed.producto : "general";
-
-        // Si no detecto ninguna categoria valida, usar venta por defecto
         if (categorias.length === 0) categorias.push("venta");
-
-        console.log(`Categorias detectadas: ${categorias.join(", ")} | Producto: ${producto}`);
         return { categorias, producto };
-
     } catch (e) {
         console.log("Error parseando JSON de Claude:", e.message);
         return { categorias: ["venta"], producto: "general" };
     }
+}
+
+// -- Funcion principal de clasificacion -------
+async function clasificarMensaje(mensaje) {
+    // Primero intentar clasificacion manual (mas rapida y precisa para casos obvios)
+    const manual = clasificacionManual(mensaje);
+    if (manual) {
+        console.log(`Clasificacion manual: ${manual}`);
+        // Si encontro una categoria manual, igual llamar a Claude para detectar categorias adicionales
+        const { categorias, producto } = await clasificarConClaude(mensaje);
+        // Asegurarse de que la categoria manual siempre este incluida
+        if (!categorias.includes(manual)) categorias.unshift(manual);
+        return { categorias, producto };
+    }
+    // Si no hay clasificacion manual clara, usar solo Claude
+    return await clasificarConClaude(mensaje);
 }
 
 // -- Aplicar etiquetas en Chatwoot ------------
@@ -151,14 +177,13 @@ async function yaFueSaludado(conversationId) {
 }
 
 // -- Armar mensaje segun categorias y producto
-// Usa la primera categoria para el mensaje principal
 function armarMensaje(categorias, producto, enHorario) {
     const item = CATALOGO[producto] || CATALOGO["general"];
     const linkProducto = producto !== "general"
         ? `\n\nPodes ver todos nuestros ${item.nombre} aca: ${item.url}`
         : `\n\nPodes ver todos nuestros productos en nuestra tienda: ${item.url}`;
 
-    // Prioridad de mensaje: reclamo > administrativo > posventa-ml > soporte > venta
+    // Prioridad del mensaje principal
     const prioridad = ["reclamo", "administrativo", "posventa-mercadolibre", "soporte", "venta"];
     const categoriaPrincipal = prioridad.find(p => categorias.includes(p)) || "venta";
 
@@ -190,27 +215,21 @@ app.all('*', async (req, res) => {
         console.log(`--- Nuevo mensaje: "${messageContent}" | Conv: ${conversationId} ---`);
 
         try {
-            // Verificar si ya fue saludado
             const saludado = await yaFueSaludado(conversationId);
             if (saludado) {
                 console.log("Cliente ya fue saludado, ignorando.");
                 return res.status(200).send("OK");
             }
 
-            // Verificar horario
             const { enHorario } = estaEnHorario();
-
-            // Clasificar (ahora devuelve multiples categorias)
             const { categorias, producto } = await clasificarMensaje(messageContent);
 
-            // Armar etiquetas: todas las categorias detectadas + fuera-de-horario si aplica
             const etiquetas = [...categorias];
             if (!enHorario) etiquetas.push("fuera-de-horario");
 
             await aplicarEtiquetas(conversationId, etiquetas);
             console.log(`Etiquetas aplicadas: ${etiquetas.join(", ")}`);
 
-            // Armar y enviar mensaje
             const mensaje = armarMensaje(categorias, producto, enHorario);
             await enviarMensaje(conversationId, mensaje);
             console.log("Mensaje enviado al cliente.");
